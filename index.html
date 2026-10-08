@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fare Watch</title>
+<style>
+:root{--bg:#f4f2ef;--ink:#1e1a1a;--mute:#6d6660;--line:#d8d3cc;--red:#c8102e;--good:#1f7a4d;--panel:#fbfaf8}
+@media(prefers-color-scheme:dark){:root{--bg:#171515;--ink:#f1eeea;--mute:#a39c95;--line:#353030;--red:#ff4d63;--good:#5fd196;--panel:#201d1d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:860px;margin:0 auto;padding:32px 20px 64px}
+h1{font:600 15px/1 system-ui;margin:0 0 28px;color:var(--mute);letter-spacing:.02em}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px}
+.tabs button{font:inherit;padding:6px 14px;border:1px solid var(--line);background:none;color:var(--ink);border-radius:99px;cursor:pointer}
+.tabs button[aria-pressed=true]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+.hero{border-top:3px solid var(--red);padding-top:16px;margin-bottom:28px}
+.route{font:500 clamp(28px,6vw,44px)/1.1 Georgia,"Iowan Old Style",serif;margin:0}
+.meta{color:var(--mute);margin:4px 0 20px}
+.price{font:600 clamp(56px,14vw,104px)/1 Georgia,serif;letter-spacing:-.02em;margin:0}
+.price small{font:500 18px system-ui;color:var(--mute);letter-spacing:0;margin-left:8px}
+.sub{margin:6px 0 0;color:var(--mute)}
+.down{color:var(--good)}.up{color:var(--red)}
+h2{font:600 16px system-ui;margin:32px 0 10px}
+svg{width:100%;height:auto;display:block}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:9px 6px;border-bottom:1px solid var(--line)}
+th{font-weight:500;color:var(--mute);font-size:14px}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.empty{padding:20px;border:1px dashed var(--line);color:var(--mute);border-radius:6px}
+details{margin-top:40px;border-top:1px solid var(--line);padding-top:16px}
+summary{cursor:pointer;font-weight:600}
+form{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:14px}
+label{display:grid;gap:4px;font-size:14px;color:var(--mute)}
+input{font:inherit;padding:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:6px}
+form button{font:inherit;grid-column:1/-1;justify-self:start;padding:9px 18px;border:0;border-radius:6px;background:var(--red);color:#fff;cursor:pointer}
+#msg{color:var(--mute);font-size:14px;margin-top:10px}
+</style>
+</head>
+<body>
+<main>
+<h1>Fare Watch</h1>
+<div class="tabs" id="tabs" role="group" aria-label="Routes"></div>
+<div id="view"></div>
+
+<details>
+<summary>Add a route</summary>
+<form id="add">
+<label>From (airport code)<input name="from" maxlength="3" required placeholder="HBA"></label>
+<label>To (airport code)<input name="to" maxlength="3" required placeholder="BNE"></label>
+<label>Airline code (blank = any)<input name="air" maxlength="2" placeholder="VA"></label>
+<label>Alert below (optional)<input name="alert" type="number" min="0" placeholder="400"></label>
+<button type="submit">Copy entry and open watchlist</button>
+</form>
+<p id="msg"></p>
+</details>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const money = (p, cur) => `$${Math.round(p).toLocaleString()}`;
+let DATA = {routes:{}}, current = null;
+
+async function load(){
+  try{
+    const r = await fetch("data/prices.json?"+Date.now());
+    DATA = await r.json();
+  }catch(e){ $("#view").innerHTML = '<p class="empty">Could not load data/prices.json. Check that GitHub Pages is serving the repo root.</p>'; return; }
+  const ids = Object.keys(DATA.routes);
+  if(!ids.length){ $("#tabs").innerHTML=""; $("#view").innerHTML = '<p class="empty">No prices yet. In your repo, open Actions → Check fares → Run workflow, then refresh this page in a few minutes.</p>'; return; }
+  current = ids.includes(current) ? current : ids[0];
+  $("#tabs").innerHTML = ids.map(id => `<button aria-pressed="${id===current}" data-id="${esc(id)}">${esc(DATA.routes[id].label)} · ${esc(DATA.routes[id].airline)}</button>`).join("");
+  document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => { current = b.dataset.id; load(); });
+  render(DATA.routes[current]);
+}
+
+const minOf = run => run.fares.length ? Math.min(...run.fares.map(f => f.p)) : null;
+
+function render(rt){
+  const runs = rt.runs, last = runs[runs.length-1];
+  const hist = runs.map(r => ({t:new Date(r.t), p:minOf(r)})).filter(x => x.p !== null);
+  let html = `<section class="hero"><p class="route">${esc(rt.label)}</p>
+    <p class="meta">${esc(rt.cabin)} class · ${esc(rt.airline)} · checked ${new Date(last.t).toLocaleString()}</p>`;
+  if(!last.fares.length){
+    html += `<p class="empty">No ${esc(rt.cabin)} fares found on the last check. The airline may not sell this cabin on the route, or the data source returned nothing. See the Actions log.</p></section>`;
+    $("#view").innerHTML = html; return;
+  }
+  const low = last.fares.reduce((a,b) => b.p < a.p ? b : a);
+  const prev = hist.length > 1 ? hist[hist.length-2].p : null;
+  const allLow = Math.min(...hist.map(h => h.p));
+  let delta = "";
+  if(prev !== null && prev !== low.p){ const d = low.p - prev; delta = ` <span class="${d<0?"down":"up"}">${d<0?"down":"up"} ${money(Math.abs(d))} since the last check</span>.`; }
+  html += `<p class="price">${money(low.p)}<small>${esc(rt.currency)}</small></p>
+    <p class="sub">Cheapest on ${esc(low.d)}, ${esc(low.f)} at ${esc(low.dep)}.${delta} Lowest seen: ${money(allLow)}.</p></section>`;
+  html += `<h2>Cheapest fare per check</h2>` + chart(hist, rt.currency);
+  html += `<h2>By departure date (latest check)</h2><table><thead><tr><th>Date</th><th>Flight</th><th>Departs</th><th>Stops</th><th class="n">Fare</th></tr></thead><tbody>` +
+    last.fares.slice().sort((a,b)=>a.d.localeCompare(b.d)).map(f => `<tr><td>${esc(f.d)}</td><td>${esc(f.f)}</td><td>${esc(f.dep)}</td><td>${f.stops?f.stops:"Nonstop"}</td><td class="n">${money(f.p)}</td></tr>`).join("") + `</tbody></table>`;
+  $("#view").innerHTML = html;
+}
+
+function chart(h){
+  if(h.length < 2) return '<p class="empty">The chart appears after two or more checks.</p>';
+  const W=760,H=240,L=48,R=12,T=12,B=26;
+  const xs=h.map(p=>+p.t), ys=h.map(p=>p.p);
+  const x0=Math.min(...xs), x1=Math.max(...xs), y0=Math.min(...ys), y1=Math.max(...ys);
+  const pad=(y1-y0||y1*.1||1)*.15, lo=Math.max(0,y0-pad), hi=y1+pad;
+  const X=v=>L+(v-x0)/(x1-x0||1)*(W-L-R), Y=v=>T+(1-(v-lo)/(hi-lo))*(H-T-B);
+  const pts=h.map(p=>`${X(+p.t).toFixed(1)},${Y(p.p).toFixed(1)}`).join(" ");
+  const ticks=[lo,(lo+hi)/2,hi].map(v=>`<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${L-6}" y="${Y(v)+4}" text-anchor="end" font-size="12" fill="var(--mute)">$${Math.round(v)}</text>`).join("");
+  const d=t=>new Date(t).toLocaleDateString(undefined,{day:"numeric",month:"short"});
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Cheapest fare over time">${ticks}
+    <polyline points="${pts}" fill="none" stroke="var(--red)" stroke-width="2.5" stroke-linejoin="round"/>
+    <text x="${L}" y="${H-6}" font-size="12" fill="var(--mute)">${d(x0)}</text>
+    <text x="${W-R}" y="${H-6}" font-size="12" text-anchor="end" fill="var(--mute)">${d(x1)}</text></svg>`;
+}
+
+$("#add").onsubmit = async e => {
+  e.preventDefault();
+  const f = new FormData(e.target), from = f.get("from").toUpperCase(), to = f.get("to").toUpperCase(), air = f.get("air").toUpperCase().trim();
+  const entry = {id:`${from}-${to}${air?"-"+air:""}`.toLowerCase(), from, to, airline_codes:air?[air]:[], airline_names:[], cabin:"business", adults:1,
+    days_ahead_from:14, days_ahead_to:90, sample_every_days:7, currency_label:"AUD", alert_below:Number(f.get("alert")||0)};
+  const text = JSON.stringify(entry, null, 2);
+  try{ await navigator.clipboard.writeText(text); $("#msg").textContent = "Copied. Paste it into the list (add a comma after the previous entry), then commit."; }
+  catch{ $("#msg").textContent = "Copy this into watchlist.json: " + text; }
+  const host = location.hostname, repo = location.pathname.split("/")[1];
+  if(host.endsWith(".github.io") && repo) window.open(`https://github.com/${host.split(".")[0]}/${repo}/edit/main/watchlist.json`, "_blank");
+};
+load();
+</script>
+</body>
+</html>

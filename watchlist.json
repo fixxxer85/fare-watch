@@ -1,0 +1,16 @@
+[
+  {
+    "id": "hba-bne-va",
+    "from": "HBA",
+    "to": "BNE",
+    "airline_codes": ["VA"],
+    "airline_names": ["virgin"],
+    "cabin": "business",
+    "adults": 1,
+    "days_ahead_from": 14,
+    "days_ahead_to": 90,
+    "sample_every_days": 7,
+    "currency_label": "AUD",
+    "alert_below": 0
+  }
+]
