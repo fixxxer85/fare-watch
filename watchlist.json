@@ -12,6 +12,6 @@
     "sample_every_days": 7,
     "currency_label": "AUD",
     "alert_below": 0,
-    "depart_after": "09:00",
+    "depart_after": "09:00"
   }
 ]
