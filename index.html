@@ -81,7 +81,7 @@ function render(rt){
   const runs = rt.runs, last = runs[runs.length-1];
   const hist = runs.map(r => ({t:new Date(r.t), p:minOf(r)})).filter(x => x.p !== null);
   let html = `<section class="hero"><p class="route">${esc(rt.label)}</p>
-    <p class="meta">${esc(rt.cabin)} class · ${esc(rt.airline)} · checked ${new Date(last.t).toLocaleString()}</p>`;
+    <p class="meta">${esc(rt.cabin)} class · ${esc(rt.airline)}${rt.depart_after ? " · departs after " + esc(rt.depart_after) : ""} · checked ${new Date(last.t).toLocaleString()}</p>`;
   if(!last.fares.length){
     html += `<p class="empty">No ${esc(rt.cabin)} fares found on the last check. The airline may not sell this cabin on the route, or the data source returned nothing. See the Actions log.</p></section>`;
     $("#view").innerHTML = html; return;
