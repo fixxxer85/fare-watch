@@ -46,6 +46,10 @@ def best_fare(route, date):
         legs = getattr(r, "legs", [])
         if not legs or not all(wanted(l, route) for l in legs):
             continue
+        after = route.get("depart_after")  # "HH:MM", local time at the origin
+        first_dep = getattr(legs[0], "departure_datetime", None)
+        if after and first_dep and first_dep.strftime("%H:%M") < after:
+            continue
         if best is None or r.price < best["p"]:
             first = legs[0]
             dep = getattr(first, "departure_datetime", None)
@@ -83,7 +87,8 @@ def main():
         entry.update({"label": f'{route["from"]} → {route["to"]}',
                       "airline": ", ".join(route.get("airline_codes", [])) or "any airline",
                       "cabin": route.get("cabin", "business"),
-                      "currency": route.get("currency_label", "")})
+                      "currency": route.get("currency_label", ""),
+                      "depart_after": route.get("depart_after", "")})
         prev = [min(f["p"] for f in r["fares"]) for r in entry["runs"] if r["fares"]]
         entry["runs"].append({"t": now.isoformat(timespec="minutes"), "fares": fares})
         entry["runs"] = entry["runs"][-MAX_RUNS:]
